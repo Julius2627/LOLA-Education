@@ -1,0 +1,21 @@
+# Python
+venv/
+.venv/
+__pycache__/
+*.pyc
+
+# macOS folder data
+.DS_Store
+
+# Editor settings
+.vscode/
+
+# Compiled C algorithms (built from applied/algorithms/uflp.c, see the README)
+*.dylib
+*.so
+*.dll
+
+# PyInstaller build output
+build/
+dist/
+*.spec
