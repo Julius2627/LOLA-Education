@@ -4,6 +4,7 @@ from matplotlib.figure import Figure
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from PyQt5.QtWidgets import QCheckBox, QHBoxLayout, QLabel, QVBoxLayout, QWidget
 import matplotlib
+from matplotlib.lines import Line2D
 from matplotlib.patches import Polygon, Rectangle
 from numbers import Real
 
@@ -11,6 +12,9 @@ from numbers import Real
 # direction, so that they do not lie on top of each other; all other arcs and the edges stay straight
 BEND = 0.15
 CURVED = f"arc3,rad={BEND}"
+# The colours of the solutions of several problems shown together (Education planar and network pages: the first one
+# red as before, every further problem the next colour; blue and skyblue are the colours of the data)
+SOLUTION_COLOURS = ("red", "darkorange", "green", "purple", "brown", "magenta", "olive", "black")
 
 
 def curve_points(start, end, curved, t1=0.0, t2=1.0, points=20):
@@ -45,6 +49,7 @@ class PlotCanvas(FigureCanvas):
         # Initialize the FigureCanvas with the created figure.
         super().__init__(fig)
         self.setParent(parent)
+        self.shown_problems = {}        # the solutions of the problems on the network drawing (plot_solution_node)
 
     def plot_graph(self, graph, pos=None):
         """
@@ -53,6 +58,7 @@ class PlotCanvas(FigureCanvas):
         :param pos: The positions of the nodes (the layout stored with the graph); a new layout if None.
         """
         self.axes.clear()
+        self.shown_problems = {}
         if pos is None:
             pos = nx.spring_layout(graph)  # Compute positions for all nodes.
 
@@ -104,9 +110,15 @@ class PlotCanvas(FigureCanvas):
         nx.draw_networkx_edge_labels(graph, pos, ax=self.axes, edge_labels=edge_labels, label_pos=0.3)
         self.draw()'''
     
-    def plot_solution_node(self, graph, solutions, pos):
+    def plot_solution_node(self, graph, solutions, pos, label=None):
         """
         Plots a graph and highlights optimal solutions.
+
+        label: the short name of the problem (Education network page). The solutions of earlier problems on the same
+        network stay (until plot_graph or show_network_default_axes draws the network anew); every problem gets its own
+        colour (SOLUTION_COLOURS) and an entry in a small legend, the same problem again its earlier colour and place.
+        Where problems mark the same place, the earlier one is drawn larger, so it stays visible as a ring.
+        None: only these solutions, red, without a legend (Applied graph page).
 
         Expected solution format:
         - Integer i:
@@ -164,6 +176,32 @@ class PlotCanvas(FigureCanvas):
         )
         self._draw_curved_arcs(graph, pos, curved)
 
+        if label is None:           # only these solutions, red, without a legend
+            self.shown_problems = {}
+            problems = {None: solutions}
+        else:                       # the same problem again keeps its place and colour
+            self.shown_problems[label] = solutions
+            problems = self.shown_problems
+        for k, marks in enumerate(problems.values()):  # an earlier problem larger: a later one at its place leaves a ring
+            self._highlight(graph, pos, marks, curved, SOLUTION_COLOURS[k % len(SOLUTION_COLOURS)], len(problems) - 1 - k)
+
+        # Redraw labels, otherwise highlighted nodes may cover text
+        nx.draw_networkx_labels(graph, pos, labels=labels, ax=self.axes, font_size=15)
+
+        # Edge labels
+        self._draw_edge_labels(graph, pos, curved)
+
+        if label is not None:       # the legend of the problems shown
+            self.axes.legend(handles=[Line2D([], [], marker="o", linestyle="", markersize=10, label=name,
+                                             color=SOLUTION_COLOURS[k % len(SOLUTION_COLOURS)])
+                                      for k, name in enumerate(problems)], fontsize="small", loc="best")
+
+        self.axes.axis("off")
+        self.draw()
+
+    def _highlight(self, graph, pos, solutions, curved, colour, grow):
+        """Marks the solutions of one problem (formats: plot_solution_node) in its colour; grow: so many steps larger."""
+        is_directed = graph.is_directed()
         highlighted_nodes = []
         highlighted_edges = []
         highlighted_arcs = []           # whole arcs of a directed graph
@@ -246,26 +284,26 @@ class PlotCanvas(FigureCanvas):
                 pos,
                 edgelist=highlighted_edges,
                 ax=self.axes,
-                edge_color="red",
-                width=5,
+                edge_color=colour,
+                width=5 + 4 * grow,
                 **arrow_options
             )
 
-        # Highlight whole arcs: red arrows, on the curve of two opposite arcs
+        # Highlight whole arcs: arrows in the colour, on the curve of two opposite arcs
         straight_arcs = [arc for arc in highlighted_arcs if arc not in curved]
         if straight_arcs:
             nx.draw_networkx_edges(graph, pos, edgelist=straight_arcs, ax=self.axes, node_size=2000, arrows=True,
-                                   arrowsize=25, edge_color="red", width=5)
+                                   arrowsize=25, edge_color=colour, width=5 + 4 * grow)
         self._draw_curved_arcs(graph, pos, [arc for arc in highlighted_arcs if arc in curved], arrowsize=25,
-                               edge_color="red", width=5)
+                               edge_color=colour, width=5 + 4 * grow)
 
         # Highlight intervals on edges/arcs
         for p1, p2 in highlighted_intervals:
             self.axes.plot(
                 [p1[0], p2[0]],
                 [p1[1], p2[1]],
-                color="red",
-                linewidth=6,
+                color=colour,
+                linewidth=6 + 4 * grow,
                 solid_capstyle="round",
                 zorder=5
             )
@@ -276,8 +314,8 @@ class PlotCanvas(FigureCanvas):
             self.axes.scatter(
                 x_values,
                 y_values,
-                color="red",
-                s=250,
+                color=colour,
+                s=250 + 250 * grow,
                 edgecolors="black",
                 zorder=6
             )
@@ -289,24 +327,9 @@ class PlotCanvas(FigureCanvas):
                 pos,
                 nodelist=highlighted_nodes,
                 ax=self.axes,
-                node_color="red",
-                node_size=2200
+                node_color=colour,
+                node_size=2200 + 600 * grow
             )
-
-        # Redraw labels, otherwise highlighted nodes may cover text
-        nx.draw_networkx_labels(
-            graph,
-            pos,
-            labels=labels,
-            ax=self.axes,
-            font_size=15
-        )
-
-        # Edge labels
-        self._draw_edge_labels(graph, pos, curved)
-
-        self.axes.axis("off")
-        self.draw()
 
     def plot_data(self, data):
         """
@@ -322,9 +345,13 @@ class PlotCanvas(FigureCanvas):
         self.axes.set_title("Data Points")
         self.draw()
 
-    def plot_solution(self, solution):
+    def plot_solution(self, solution, label=None):
         """
         Plots solution on the canvas.
+
+        label: the short name of the problem (Education planar page). The solutions stay until the data change; every
+        problem gets its own colour (SOLUTION_COLOURS) and an entry in a small legend, the same problem again its
+        earlier colour and no second entry. None: red, without a legend (Applied planar page).
 
         New format:
             [0, (x, y)]              -> point
@@ -357,6 +384,14 @@ class PlotCanvas(FigureCanvas):
             and is_point(solution[1])
         )
 
+        # the colour of this problem: that of its earlier solution if it is shown, else the next one
+        colour, entry = "red", None
+        if label is not None:
+            shown = {c.get_label(): tuple(c.get_facecolor()[0]) for c in self.axes.collections
+                     if not c.get_label().startswith("_")}
+            colour = shown.get(label, SOLUTION_COLOURS[len(shown) % len(SOLUTION_COLOURS)])
+            entry = None if label in shown else label
+
         if is_new_format:
             solution_type = solution[0]
             p1 = solution[1]
@@ -376,7 +411,8 @@ class PlotCanvas(FigureCanvas):
                 and all(is_point(p) for p in solution)
             ):
                 x, y = zip(*solution)
-                self.axes.scatter(x, y, color="red", zorder=5)
+                self.axes.scatter(x, y, color=colour, zorder=5, label=entry)
+                self._solution_legend(label)
                 self.axes.set_title("Solution")
                 self.draw()
                 return
@@ -386,7 +422,7 @@ class PlotCanvas(FigureCanvas):
 
         if solution_type == 0:
             x, y = p1
-            self.axes.scatter([x], [y], color="red", zorder=5)
+            self.axes.scatter([x], [y], color=colour, zorder=5, label=entry)
 
         elif solution_type == 1:
             if p2 is None or not is_point(p2):
@@ -395,8 +431,8 @@ class PlotCanvas(FigureCanvas):
             x1, y1 = p1
             x2, y2 = p2
 
-            self.axes.plot([x1, x2], [y1, y2], color="red", linewidth=3, zorder=4)
-            self.axes.scatter([x1, x2], [y1, y2], color="red", zorder=5)
+            self.axes.plot([x1, x2], [y1, y2], color=colour, linewidth=3, zorder=4)
+            self.axes.scatter([x1, x2], [y1, y2], color=colour, zorder=5, label=entry)
 
         elif solution_type == 2:
             if p2 is None or not is_point(p2):
@@ -414,21 +450,27 @@ class PlotCanvas(FigureCanvas):
                 (left, bottom),
                 width,
                 height,
-                edgecolor="red",
-                facecolor="red",
+                edgecolor=colour,
+                facecolor=colour,
                 alpha=0.25,
                 linewidth=2,
                 zorder=3
             )
 
             self.axes.add_patch(rect)
-            self.axes.scatter([x1, x2], [y1, y2], color="red", zorder=5)
+            self.axes.scatter([x1, x2], [y1, y2], color=colour, zorder=5, label=entry)
 
         else:
             return
 
+        self._solution_legend(label)
         self.axes.set_title("Solution")
         self.draw()
+
+    def _solution_legend(self, label):
+        """The small legend of the problems whose solutions are shown (only with a label, see plot_solution)."""
+        if label is not None:
+            self.axes.legend(fontsize="small", loc="best")
 
     def plot_districts(self, areas, result=None):
         """
@@ -493,6 +535,7 @@ class PlotCanvas(FigureCanvas):
 
     def show_network_default_axes(self):
         self.axes.clear()
+        self.shown_problems = {}
         self.axes.set_title("Empty Graph - Default View")
         self.axes.grid(False)
         self.axes.axis("off")

@@ -107,4 +107,4 @@ IOR, Karlsruhe Institute of Technology (KIT)
 
 ---
 
-Version: 0.9 (Beta) – Last updated: November 2026
+Version: 0.9.1 (Beta) – Last updated: November 2026

@@ -152,8 +152,9 @@ class EducationController:
 
         optimal_points, result_str, solution_path, _ = algo.run()   # no CSV output in the Education Mode
        
-        # Plot the optimal points in the coordinate system (PlotCanvas)
-        self.view.planar_education_plot_canvas.plot_solution(optimal_points)
+        # Plot the optimal points in the coordinate system (PlotCanvas): every problem in its own colour, with its short
+        # name in the legend ("Median l1 Unweighted" for "Median l1 Metric Unweighted")
+        self.view.planar_education_plot_canvas.plot_solution(optimal_points, algo_name.replace(" Metric", ""))
 
         # Check if the solution path checkbox is selected and update the text field
         if self.view.planar_education_show_solution_checkbox.isChecked():
@@ -223,9 +224,9 @@ class EducationController:
 
             generated_coordinates.add((x, y))
 
-        # Add generated points to model
+        # Add generated points to model, each with a random weight from 1 to 10 (weighted and unweighted problems differ)
         for x, y in generated_coordinates:
-            self.model.add_point((x, y, 1.0))
+            self.model.add_point((x, y, float(random.randint(1, 10))))
 
         # Update text display
         self.view.update_coordinate_display_points_education()
@@ -580,7 +581,10 @@ class EducationController:
 
         optimal_nodes, solution_string, solution_path, _ = algo.run()   # no CSV output in the Education Mode
 
-        self.view.network_education_plot_canvas.plot_solution_node(self.modelmatrix.get_graph(), optimal_nodes, self.modelmatrix.get_pos())
+        # every problem in its own colour, the earlier ones stay, with its short name in the legend ("Median" for "Median
+        # Undirected Network", "In Center" for "In Center Directed Network")
+        short = algo_name.replace(" Network", "").replace(" Undirected", "").replace(" Directed", "")
+        self.view.network_education_plot_canvas.plot_solution_node(self.modelmatrix.get_graph(), optimal_nodes, self.modelmatrix.get_pos(), short)
         
         # Check if the solution path checkbox is selected and update the text field
         if self.view.network_education_show_solution_checkbox.isChecked():
